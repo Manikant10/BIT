@@ -1,0 +1,50 @@
+name: Build Android (EAS)
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Login to Expo (token)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          echo "Logging into expo with token"
+          # write token to ~/.expo if necessary
+          mkdir -p ~/.expo
+          echo "$EXPO_TOKEN" > ~/.expo/token
+          chmod 600 ~/.expo/token
+
+      - name: Run EAS Build (Android AAB)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          # Non-interactive build for CI; change --profile if needed
+          eas build --platform android --profile production --non-interactive --wait
+
+      - name: Show build URL (for convenience)
+        run: |
+          echo "EAS build finished. Check the workflow logs for the build output and download URL."

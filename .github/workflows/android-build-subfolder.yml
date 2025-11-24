@@ -1,0 +1,53 @@
+name: Build Android (EAS) - subfolder support
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+env:
+  SUBFOLDER: "" # set this to your subfolder if package.json is not at repo root, e.g. "client"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies (from subfolder if specified)
+        run: |
+          if [ -n "${{ env.SUBFOLDER }}" ]; then
+            cd "${{ env.SUBFOLDER }}"
+          fi
+          npm ci
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Login to Expo (token)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          mkdir -p ~/.expo
+          echo "$EXPO_TOKEN" > ~/.expo/token
+          chmod 600 ~/.expo/token
+
+      - name: Run EAS Build (Android AAB)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -n "${{ env.SUBFOLDER }}" ]; then
+            cd "${{ env.SUBFOLDER }}"
+          fi
+          eas build --platform android --profile production --non-interactive --wait

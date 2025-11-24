@@ -1,0 +1,75 @@
+name: Build and Submit Android (EAS)
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+env:
+  SUBFOLDER: "" # set to folder path if your package.json is not in repo root, e.g. "client"
+
+jobs:
+  build_and_submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Setup working dir (if needed)
+        run: |
+          if [ -n "${{ env.SUBFOLDER }}" ]; then
+            echo "Changing to subfolder ${{ env.SUBFOLDER }}"
+            cd "${{ env.SUBFOLDER }}"
+          fi
+
+      - name: Install dependencies
+        run: |
+          if [ -n "${{ env.SUBFOLDER }}" ]; then
+            cd "${{ env.SUBFOLDER }}"
+          fi
+          npm ci
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Login to Expo (token)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          mkdir -p ~/.expo
+          echo "$EXPO_TOKEN" > ~/.expo/token
+          chmod 600 ~/.expo/token
+
+      - name: Run EAS Build (Android AAB)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          if [ -n "${{ env.SUBFOLDER }}" ]; then
+            cd "${{ env.SUBFOLDER }}"
+          fi
+          eas build --platform android --profile production --non-interactive --wait
+
+      - name: Prepare Google Service Account (for eas submit)
+        if: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON != '' }}
+        run: |
+          echo "$GOOGLE_SERVICE_ACCOUNT_JSON" > google-service-account.json
+          chmod 600 google-service-account.json
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+
+      - name: Submit to Google Play (optional)
+        if: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON != '' }}
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          eas submit --platform android --profile production --non-interactive --latest
